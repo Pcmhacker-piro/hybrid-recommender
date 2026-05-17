@@ -3,7 +3,7 @@
 ║                                                                  ║
 ║    H Y B R I D R E C                                             ║
 ║    ─────────────────────────────────────────────────────────     ║
-║    Hybrid Recommender System · Leona Goel · VIT 2024–2028        ║
+║    Hybrid Recommender System · Leona Goel      
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
@@ -18,6 +18,11 @@
 [![MIT License](https://img.shields.io/badge/License-MIT-ff6b35?style=flat-square)](LICENSE)
 
 </div>
+
+---
+
+> [!IMPORTANT]
+> **🟢 This is the active GSSoC project repo — open all issues and PRs here only.**
 
 ---
 
@@ -154,7 +159,7 @@ hybrid-recommender/
 
 ```bash
 # 1 — Clone & install
-git clone https://github.com/leonagoel/hybrid-recommender.git
+git clone https://github.com/Bhumi1701/hybrid-recommender.git
 cd hybrid-recommender
 pip install -r requirements.txt
 ```
