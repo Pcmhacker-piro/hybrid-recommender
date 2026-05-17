@@ -997,3 +997,15 @@ body {
     background: rgba(255,255,255,0.6);
     border-radius: inherit;
 }
+
+
+/* ── Scroll Progress Bar ─────────────────────────────────────────── */
+#scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background-color: var(--success); /* Using the project's teal/green variable */
+    width: 0%;
+    z-index: 9999; /* Keeps it above the header */
+}
