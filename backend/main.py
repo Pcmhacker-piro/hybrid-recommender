@@ -32,6 +32,7 @@ from nlp_engine import batch_analyze, aggregate_sentiment_by_item
 from content_model import ContentRecommender
 from collaborative_model import CollaborativeRecommender
 from hybrid_model import HybridRecommender
+from ab_testing import DEFAULT_EXPERIMENT_ID, run_recommendation_experiment
 
 # ── App ──────────────────────────────────────────────────────────────
 app = FastAPI(title="Hybrid Recommender API", version="3.0")
@@ -388,19 +389,46 @@ def build_models():
 # ── Recommendations ────────────────────────────────────────────────
 
 @app.get("/api/recommend/{item_title}")
-def get_recommendations(item_title: str, top_n: int = 10, explain: bool = Query(False)):
+def get_recommendations(
+    item_title: str,
+    top_n: int = 10,
+    explain: bool = Query(False),
+    experiment_user: Optional[str] = Query(
+        None,
+        description="Stable user/session key to opt into recommendation A/B testing.",
+    ),
+    experiment_id: str = Query(DEFAULT_EXPERIMENT_ID),
+):
     """Get hybrid recommendations for an item."""
     if not models["ready"]:
         raise HTTPException(400, "Models not built. Build first via /api/build.")
-    recs = models["hybrid"].recommend(item_title, top_n=top_n, explain=explain)
+
+    experiment = None
+    if experiment_user:
+        experiment_result = run_recommendation_experiment(
+            models["hybrid"],
+            item_title,
+            user_key=experiment_user,
+            top_n=top_n,
+            explain=explain,
+            experiment_id=experiment_id,
+        )
+        recs = experiment_result["recommendations"]
+        experiment = experiment_result["experiment"]
+    else:
+        recs = models["hybrid"].recommend(item_title, top_n=top_n, explain=explain)
+
     if not recs:
         raise HTTPException(404, "Item not found or no recommendations.")
-    return {
+    response = {
         "query_item": item_title,
         "recommendations": recs,
         "weights": models["hybrid"].get_weights(),
         "explain": explain,
     }
+    if experiment:
+        response["experiment"] = experiment
+    return response
 
 
 # ── Weights ─────────────────────────────────────────────────────────
