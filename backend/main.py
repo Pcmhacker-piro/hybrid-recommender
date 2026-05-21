@@ -732,114 +732,73 @@ def _recommendation_payload(
     return payload
 
 
-@app.get("/api/explain")
-def explain_recommendation(item: str, user: str):
-    """Explain WHY an item was recommended to a specific user."""
-    if not models["ready"]:
+@app.get("/api/similar/{item_id}")
+def get_similar_items(
+    item_id: str,
+    top_n: int = Query(10, ge=1, le=100),
+    category: Optional[str] = Query(
+        None,
+        description="Optional category name to restrict similar items.",
+    ),
+    explain: bool = Query(False),
+):
+    """Get similar products by item id, optionally scoped to one category."""
+    if not models["ready"] or models["item_df"] is None:
         raise HTTPException(400, "Models not built. Build first via /api/build.")
-        
-    hybrid = models["hybrid"]
-    
-    # Check if item exists in our models
-    if item not in hybrid._rating_map:
-        raise HTTPException(404, "Item not found in recommendations database.")
-        
-    # Extract item scores
-    sentiment_score = hybrid._sentiment_map.get(item, 0.0)
-    bayesian_score = hybrid._rating_map.get(item, 0.0)
-    norm_sentiment = (sentiment_score + 1) / 2
-    
-    collab_score = 0.0
-    content_score = 0.0
-    
-    collab_model = models.get("collab")
-    if collab_model:
-        # Predict rating for the user and item
-        pred = collab_model.predict_rating(user, item)
-        if pred is not None:
-            collab_score = max(0.0, min(1.0, pred / 5.0))
-            
-        # For content score, compare against the user's top-rated item
-        user_history = collab_model.df[collab_model.df['user_id'] == user]
-        if not user_history.empty:
-            top_item = user_history.loc[user_history['rating'].idxmax()]['title']
-            content_model = models.get("content")
-            if content_model:
-                try:
-                    recs = content_model.recommend(top_item, top_n=100)
-                    for r in recs:
-                        if r['title'] == item:
-                            content_score = r['content_score']
-                            break
-                except Exception:
-                    pass
-    
-    # Build reasons
-    reasons = []
-    if collab_score > 0.7:
-        reasons.append("Similar to your top rated items")
-    elif collab_score > 0.5:
-        reasons.append("Matches your user profile")
-        
-    if norm_sentiment > 0.65:
-        reasons.append("High sentiment score")
-        
-    if bayesian_score > 4.0:
-        reasons.append("Popular in your category")
-        
-    reasons = reasons[:3]
-    if not reasons:
-        reasons.append("Recommended based on general popularity")
+
+    item_df = models["item_df"]
+    if "id" not in item_df.columns:
+        raise HTTPException(400, "Model data does not include product ids.")
+
+    id_matches = item_df[item_df["id"].astype(str) == str(item_id)]
+    if id_matches.empty:
+        raise HTTPException(404, "Item not found.")
+
+    source = id_matches.iloc[0]
+    source_title = str(source.get("title", ""))
+    source_category = source.get("category", "")
+    requested_category = category.strip() if category else None
+
+    # Fetch a wider candidate pool before filtering so category filters still
+    # have enough results to fill the requested page.
+    candidate_limit = top_n if requested_category is None else min(top_n * 5, 100)
+    recs = models["hybrid"].recommend(
+        source_title,
+        top_n=candidate_limit,
+        explain=explain,
+    )
+    if requested_category is not None:
+        recs = [
+            rec
+            for rec in recs
+            if str(rec.get("category", "")).casefold() == requested_category.casefold()
+        ]
+    recs = recs[:top_n]
+
+    if not recs:
+        raise HTTPException(404, "No similar items found.")
 
     return {
-        "item": item,
-        "reasons": reasons,
-        "scores": {
-            "content": round(content_score, 4),
-            "collab": round(collab_score, 4),
-            "sentiment": round(norm_sentiment, 4),
-            "bayesian": round(bayesian_score, 4)
-        }
+        "query_item": {
+            "id": _json_scalar(source.get("id")),
+            "title": source_title,
+            "category": _json_scalar(source_category),
+        },
+        "category_filter": requested_category,
+        "recommendations": recs,
+        "total": len(recs),
+        "explain": explain,
     }
     if experiment:
         response["experiment"] = experiment
     return response
 
 
-@app.websocket("/ws/recommendations")
-async def recommendations_websocket(websocket: WebSocket):
-    """Stream recommendations whenever the browser reports a new interaction."""
-    await realtime_hub.connect(websocket)
-    try:
-        while True:
-            message = await websocket.receive_json()
-            request = RealtimeRecommendationRequest(**message)
-            top_n = max(1, min(50, request.top_n))
-            payload = _recommendation_payload(
-                request.item_title,
-                top_n=top_n,
-                explain=request.explain,
-            )
-            await websocket.send_json({"type": "recommendations", **payload})
-    except WebSocketDisconnect:
-        realtime_hub.disconnect(websocket)
-    except HTTPException as exc:
-        await websocket.send_json({"type": "error", "status_code": exc.status_code, "detail": exc.detail})
-        realtime_hub.disconnect(websocket)
-    except Exception as exc:
-        logger.exception("Recommendation websocket failed: %s", exc)
-        await websocket.send_json({"type": "error", "status_code": 500, "detail": "Recommendation stream failed."})
-        realtime_hub.disconnect(websocket)
-
-
-@app.post("/api/realtime/behavior")
-async def realtime_behavior_update(event: RealtimeRecommendationRequest):
-    """HTTP fallback for clients that cannot keep a WebSocket connection open."""
-    top_n = max(1, min(50, event.top_n))
-    payload = _recommendation_payload(event.item_title, top_n=top_n, explain=event.explain)
-    message = {"type": "recommendations", **payload}
-    await realtime_hub.broadcast(message)
-    return message
+def _json_scalar(value):
+    """Return pandas/numpy scalar values in a JSON-serializable form."""
+    if hasattr(value, "item"):
+        return value.item()
+    return value
 
 
 # ── Weights ─────────────────────────────────────────────────────────
