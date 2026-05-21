@@ -928,7 +928,17 @@ def create_purchase(data: PurchaseCreate):
     return {"purchase": result.data}
 # ── Dashboard ───────────────────────────────────────────────────────
 
-# ── Feedback ────────────────────────────────────────────────────────
+@app.route("/health")
+def health_check():
+    """
+    Returns server status. Useful for uptime monitors and Docker health checks.
+    """
+    import os
+    return jsonify({
+        "status": "ok",
+        "version": os.getenv("APP_VERSION", "1.0.0")
+    }), 200
+
 
 @app.post("/api/feedback")
 def submit_feedback(data: FeedbackCreate):
