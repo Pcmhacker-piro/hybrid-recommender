@@ -90,6 +90,7 @@ const state = {
     scrollObserver: null,
     compareList: [],
     heatmapSelected: [],
+    activeChips: new Set(['all']),
     filters: {
         category: '',
         rating: '',
@@ -270,6 +271,13 @@ function sentimentBadge(score) {
 }
 
 function applyFilters(products) {
+    // Pre-calculate chip states to avoid recomputing for every product
+    const hasAll = state.activeChips.has('all');
+    const activeCategories = Array.from(state.activeChips).filter(c => c.startsWith('category:')).map(c => c.split(':')[1]);
+    const hasTopRated = state.activeChips.has('rating:top-rated');
+    const hasPositive = state.activeChips.has('sentiment:positive');
+    const hasTrending = state.activeChips.has('special:trending');
+
     return products.filter((p) => {
 
         const matchesCategory =
@@ -292,11 +300,26 @@ function applyFilters(products) {
             !state.filters.sentiment ||
             sentiment === state.filters.sentiment;
 
-        return (
-            matchesCategory &&
-            matchesRating &&
-            matchesSentiment
-        );
+        let traditionalMatch = matchesCategory && matchesRating && matchesSentiment;
+
+        // Chip logic
+        if (hasAll) {
+            return traditionalMatch;
+        }
+
+        let pass = true;
+        
+        // Categories OR logic
+        if (activeCategories.length > 0) {
+            if (!activeCategories.includes(p.category)) pass = false;
+        }
+
+        // Ratings & Sentiments AND logic
+        if (hasTopRated && (p.rating || 0) < 4.0) pass = false;
+        if (hasPositive && sentiment !== 'positive') pass = false;
+        if (hasTrending && (p.rating || 0) < 4.2) pass = false;
+
+        return traditionalMatch && pass;
     });
 }
 
@@ -1973,6 +1996,7 @@ async function init() {
     initDebugMode();
     loadSavedWeights();
     initTypeToSearch();
+    initFilterChips();
 
     // Initialize Supabase client from backend config (no hardcoded keys)
     await initSupabase();
@@ -2076,4 +2100,47 @@ function toggleLanguage() {
         document.getElementById('hindi-indicator').style.display = 'none';
         document.getElementById('search-shortcut').style.display = 'block';
     }
+}
+
+// -- Filter Chips ----------------------------------------------------
+function initFilterChips() {
+    const chipsContainer = document.getElementById('filter-chips');
+    if (!chipsContainer) return;
+
+    const chips = chipsContainer.querySelectorAll('.chip');
+    
+    chips.forEach(chip => {
+        chip.addEventListener('click', (e) => {
+            const filterVal = e.currentTarget.dataset.filter;
+            
+            if (filterVal === 'all') {
+                state.activeChips.clear();
+                state.activeChips.add('all');
+            } else {
+                state.activeChips.delete('all');
+                
+                if (state.activeChips.has(filterVal)) {
+                    state.activeChips.delete(filterVal);
+                } else {
+                    state.activeChips.add(filterVal);
+                }
+                
+                if (state.activeChips.size === 0) {
+                    state.activeChips.add('all');
+                }
+            }
+            
+            // Update UI
+            chips.forEach(c => {
+                if (state.activeChips.has(c.dataset.filter)) {
+                    c.classList.add('active');
+                } else {
+                    c.classList.remove('active');
+                }
+            });
+            
+            // Re-render
+            renderProducts(state.allProducts, false);
+        });
+    });
 }
