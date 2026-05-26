@@ -727,6 +727,8 @@ async def upload_dataset(
                     'description': description,
                     'category': str(row.get('category', ''))[:200],
                     'rating': round(rating_val, 2),
+                    'avg_sentiment': 0.0,
+                    'review_count': 0,
                     'metadata': {},
                 })
             if not rows:
