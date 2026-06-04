@@ -10,6 +10,11 @@ import sys
 import random
 import csv
 from pathlib import Path
+
+# --- Output paths ---
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datasets")
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "sample_products.csv")
+
 # --- Configuration ---
 NUM_PRODUCTS = 200
 NUM_USERS = 100
