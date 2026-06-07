@@ -67,7 +67,6 @@ logger = logging.getLogger(__name__)
 
 from celery.result import AsyncResult
 from celery_app import celery_app
-from tasks import compute_recommendations
 
 
 # backend/main.py — corrected imports
@@ -215,7 +214,7 @@ def _recommendation_cache_key(
     return _cache_key("recommend", title, top_n, explain, user_id or "", target_catalog or "", model_version or "", strategy or "")
 
 def _get_cached_response(key: str):
-    global _cache_hits, _cache_misses
+    global _cache_misses
     if _redis_client is not None:
         try:
             cached = _redis_client.get(key)
@@ -232,7 +231,7 @@ def _get_cached_response(key: str):
         return value
 
 # ── FIX #1292: HIGH PERFORMANCE RATE LIMITER PATH ─────────────────────
-def _apply_rate_limit(ip_address: str) -> bool:
+def _apply_rate_limit(*args, **kwargs):
     """
     Applies token-bucket rate limiting dynamically.
     Optimized to handle Algorithmic Complexity DoS scenarios.
@@ -725,7 +724,6 @@ def health_check():
         result["components"]["cache"] = {"status": "error", "details": str(e)}
         result["status"] = "degraded"
 
-    return result
 
 # ── API Metrics ───────────────────────────────────────────────────────
 @app.get("/api/version")
@@ -1005,8 +1003,38 @@ def search_items(
     
             except Exception:
                 sentiment_value = "N/A"
+        else:
+            sentiment_value = raw_sentiment
+
+        results.append({
+            'id': p.get('id'),
+            'title': p.get('title'),
+            'description': p.get('description'),
+            'category': p.get('category'),
+            'price': _product_price(p),
+            'rating': float(p.get('rating') or 0),
+            'sentiment': sentiment_value,
+            'review_count': p.get('review_count', 0)
+        })
+
+    final_output = {
+        'query': query,
+        'limit': limit,
+        'offset': offset,
+        'total_found': len(results),
+        'results': results
+    }
     
-    
+    try:
+        if _redis_client is not None:
+            _redis_client.setex(cache_key, 300, json.dumps(final_output))
+    except Exception:
+        pass
+        
+    return final_output
+
+
+
 # ── FIX #1315: EXPLAINABLE AI RECOVERY ENDPOINT ROUTE ─────────────────
 @app.get("/api/recommendations/{item_id}/explanation")
 async def get_recommendation_explanation(item_id: str, user_id: str):
