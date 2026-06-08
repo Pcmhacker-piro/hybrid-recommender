@@ -215,7 +215,7 @@ def _recommendation_cache_key(
     return _cache_key("recommend", title, top_n, explain, user_id or "", target_catalog or "", model_version or "", strategy or "")
 
 def _get_cached_response(key: str):
-    global _cache_hits, _cache_misses
+    global _cache_misses
     if _redis_client is not None:
         try:
             cached = _redis_client.get(key)
@@ -590,6 +590,7 @@ def search_items(
             allowed = False
             
         # Optimization: Move cleanup out of the request loop path
+        global _request_counter
         _request_counter += 1
         if random.random() < 0.001 or _request_counter >= CLEANUP_THRESHOLD:
             _request_counter = 0
