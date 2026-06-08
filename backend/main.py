@@ -1,4 +1,6 @@
 from __future__ import annotations
+from fastapi import FastAPI # type: ignore
+from backend.routers import recommend
 
 """
 FastAPI Backend for the Hybrid Recommender System — v3 (Supabase).
@@ -43,7 +45,7 @@ sys.path.insert(0, _project_root)
 sys.path.insert(0, os.path.join(_project_root, "src", "data"))
 sys.path.insert(0, os.path.join(_project_root, "src", "model"))
 
-from fastapi import (
+from fastapi import ( # type: ignore
     FastAPI,
     Depends,
     Header,
@@ -56,6 +58,14 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
+from fastapi.middleware.cors import CORSMiddleware # type: ignore
+from fastapi.staticfiles import StaticFiles # type: ignore
+from fastapi.responses import FileResponse, JSONResponse # type: ignore
+from pydantic import BaseModel # type: ignore
+from typing import Dict, List, Optional # type: ignore
+from pydantic import BaseModel, ConfigDict, Field # type: ignore
+from typing import Any, Optional
+from dotenv import load_dotenv # type: ignore
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -73,7 +83,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from celery.result import AsyncResult
+from celery.result import AsyncResult # type: ignore
 from celery_app import celery_app
 
 
