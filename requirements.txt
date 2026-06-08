@@ -17,3 +17,4 @@ bleach
 
 # Pre-commit hooks
 pre-commit>=3.7
+sentence-transformers>=2.2.2
